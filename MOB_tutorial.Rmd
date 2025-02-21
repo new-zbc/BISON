@@ -1,0 +1,139 @@
+---
+title: "BISON Tutorial"
+output:
+  html_document: default
+  pdf_document: default
+date: '2025-02-12'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+### Introduction
+BISON is a Bayesian bi-clustering framework with feature selection for spatially resolved transcriptomic data. It detects informative genes with heterogeneity among spots and clusters spots and informative genes simultaneously. 
+
+### Installation
+Load the reqired packages and the source files.
+
+```{r cars, results = 'markup'}
+suppressMessages(library(SingleCellExperiment))
+suppressMessages(library(scran))
+suppressMessages(library(scater))
+suppressMessages(library(Matrix))
+suppressMessages(library(purrr))
+suppressMessages(library(Rcpp))
+suppressMessages(library(RcppArmadillo))
+source("R/utils.R")
+source("R/main.R")
+```
+
+### Load MOB data
+
+The current SRT data is stored in a ``SingleCellExperiment`` object. The preprocess 
+of SRT data is to keep 1000 highly variable genes (HVGs). 
+
+```{r pressure, results = 'markup'}
+load("application/data/MOB_sce_filter.RData")
+
+n_gene = 1000
+K = 4
+L = 3
+
+sce <- scater::logNormCounts(sce1)
+dec <- scran::modelGeneVar(sce, assay.type = "logcounts")
+top <- scran::getTopHVGs(dec, n = n_gene)
+sce = sce[top, ] # Keep n_gene HVGs in the following analysis
+sce
+```
+Construct adjacent matrix and neighborhood information for spots.
+```{r, results = 'markup'}
+Adj = find_neighbors(sce, "ST", "lattice")
+neighbors = find_neighbor_index(Adj, "ST")
+head(neighbors)
+```
+Construct input count matrix and calculate size factor and gene factor.
+```{r}
+sizefactor = sce$sizefactor
+genefactor = rowData(sce)$genefactor
+count_mat = assay(sce, "counts")
+P = dim(count_mat)[1]
+N = dim(count_mat)[2]
+
+s_mat = matrix(rep(sizefactor, each = P), P, N)
+g_mat = matrix(rep(genefactor, N), P, N)
+sg = s_mat * g_mat
+
+dim(count_mat)
+dim(sg)
+```
+### Run BNPSpace model
+The result is list containing predicted gene labels, predicted spot labels and full MCMC iterations. 
+```{r}
+source("R/main.R")
+timestart = Sys.time()
+result = BISON(count_mat = count_mat, sg = sg, neighbors = neighbors, 
+               K = K, R = R, f = 1, n_iters = 50, seed = 1)
+timeend = Sys.time()
+timerun = timeend - timestart
+print(timerun)
+```
+
+Obtain the etimation label for genes and spots.
+```{r}
+pred_spot_label = result$pred_spot_label
+pred_gene_label = result$pred_gene_label
+suppressMessages(library(flexclust))
+spot_ARI = randIndex(table(pred_spot_label[!is.na(sce$label)], sce$label[!is.na(sce$label)]))
+spot_ARI
+```
+### Plot
+```{r, eval=FALSE}
+count_mat_normalize = count_mat
+for(i in 1:dim(count_mat)[1]){
+  count_mat_normalize[i,] = normalize(count_mat[i, ], mode = "standard")
+  
+}
+loc_sce = cbind(colData(sce1)$col, colData(sce1)$row)
+gene_group = paste0("Pattern ", pred_gene_label)
+library(ggplot2)
+library(ComplexHeatmap)
+lgd_list <- list(title = "Relative expression level",
+                 title_position = "leftcenter-rot",
+                 legend_height = unit(5, "cm"))
+
+mob_layer = pred_spot_label
+mob_expression = count_mat_normalize
+st_color = c("#1F77B4FF", "#FF7F0EFF", "#D62728FF", "#2CA02CFF")
+
+plot_heatmap = Heatmap(mob_expression, 
+        row_split = factor(gene_group, levels = paste0("Pattern ", c(0, 1,2,3))),
+        
+        cluster_rows = FALSE,
+        cluster_row_slices = FALSE,
+        show_row_dend = FALSE,
+        row_title_rot = 0,
+        show_row_names = FALSE,
+        
+        column_split = factor(mob_layer),
+        cluster_columns = TRUE,
+        cluster_column_slices = FALSE,
+        show_column_dend = FALSE,
+        row_names_rot = 0,
+        show_column_names = FALSE,
+        top_annotation = HeatmapAnnotation(foo = anno_block(gp = gpar(fill = st_color))),
+        
+        heatmap_legend_param = lgd_list,
+        
+        use_raster = TRUE,
+        raster_quality = 4
+)
+gb = grid.grabExpr(draw(plot_heatmap))
+ggsave(gb, filename = "MOB_Heatmap.pdf", width = 12, height = 9)
+### The heatmap are stored in folder "application"
+```
+The computational environment is below. 
+```{r}
+sessionInfo()
+```
+

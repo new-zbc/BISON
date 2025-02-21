@@ -1,11 +1,6 @@
 rm(list=ls())
-load("MOB/data/MOB_sce_filter.RData")
+load("application/data/MOB_sce_filter.RData")
 
-ARGV = commandArgs(trailingOnly = TRUE)
-seed = as.numeric(ARGV[1])
-# n_gene = as.numeric(ARGV[1])
-# K = as.numeric(ARGV[2])
-# L = as.numeric(ARGV[3])
 
 n_gene = 1000
 K = 4
@@ -16,8 +11,7 @@ library(scran)
 sce <- scater::logNormCounts(sce1)
 dec <- scran::modelGeneVar(sce, assay.type = "logcounts")
 top <- scran::getTopHVGs(dec, n = n_gene)
-# # sce <- scater::runPCA(sce, subset_row = top, ncomponents=15, 
-# #                       exprs_values="logcounts")
+
 sce = sce[top, ]
 
 

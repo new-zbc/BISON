@@ -202,7 +202,7 @@ spatialFilter <- function(sce, cutoff_sample = 100, cutoff_feature = 0.1, cutoff
 
 
 
-
+################ ICL z and rho
 ICL <- function(K, L, data, sg, result, iter){
   N = dim(data)[2]
   p = dim(data)[1]
@@ -213,83 +213,6 @@ ICL <- function(K, L, data, sg, result, iter){
   mu0_hat = result$mu0_iter[, iter]
   p_hat = sum(rho_hat != 0)
   
-  likelihood1 = 0
-  likelihood2 = 0
-  for(i in 1:N){
-    for(j in 1:p){
-      if(rho_hat[j]  != 0){
-        likelihood1 = likelihood1 + dpois(data[j, i], lambda = sg[j, i]*mu_hat[rho_hat[j], group_hat[i]+1], log = T)
-      }else{
-        likelihood2 = likelihood2 + dpois(data[j, i], lambda = sg[j, i]*mu0_hat[j], log = T)
-      }
-    }
-  }
-  term1 = (-2*likelihood1 + N*log(K) + p_hat*log(L) + (K * L) *log(N*p_hat))
-  term2 = (-2*likelihood2 + (p-p_hat)*log(N))
-  #likelihood = (likelihood1 / p_hat + likelihood2 / (p - p_hat))*(p)
-  #likelihood = likelihood1 + likelihood2
-  #result = -2 *likelihood + N*log(K) + p_hat*log(L) + (K * L) *log(N*p_hat) + (p - p_hat)*log(N)
-  #term1 = term1/(p_hat)
-  #term2 = term2 / (p - p_hat)
-  result = (term1 + term2)/2
-  return(result)
-}
-
-
-
-########### scaled data
-ICL2 <- function(K, L, data, sg, result, iter){
-  N = dim(data)[2]
-  p = dim(data)[1]
-  
-  rho_hat = result$rho_iter[, iter]
-  group_hat = result$group_iter[, iter]
-  mu_hat = result$mu_iter[, , iter]
-  mu0_hat = result$mu0_iter[, iter]
-  p_hat = sum(rho_hat != 0)
-  
-  est_prob_group = table(group_hat)
-  posterior_z = sum(log(est_prob_group/N) * est_prob_group)
-  
-  est_prob_rho = table(rho_hat)[1:L]
-  posterior_rho = sum(log(est_prob_rho/p_hat) * est_prob_rho)
-  
-  
-  likelihood1 = 0
-  likelihood2 = 0
-  for(i in 1:N){
-    for(j in 1:p){
-      if(rho_hat[j]  != 0){
-        likelihood1 = likelihood1 + dpois(data[j, i], lambda = sg[j, i]*mu_hat[rho_hat[j], group_hat[i]+1], log = T)
-      }else{
-        likelihood2 = likelihood2 + dpois(data[j, i], lambda = sg[j, i]*mu0_hat[j], log = T)
-      }
-    }
-  }
-  term1 = (-2*(likelihood1+posterior_rho+posterior_z) + K*log(N) + L*log(p_hat) + (K * L) *log(N*p_hat))
-  term2 = (-2*likelihood2 + (p-p_hat)*log(N))
-  #likelihood = (likelihood1 / p_hat + likelihood2 / (p - p_hat))*(p)
-  #likelihood = likelihood1 + likelihood2
-  #result = -2 *likelihood + N*log(K) + p_hat*log(L) + (K * L) *log(N*p_hat) + (p - p_hat)*log(N)
-  term1 = term1/(p_hat)
-  term2 = term2 / (p - p_hat)
-  result = (term1 + term2 )/2
-  return(result)
-}
-
-
-
-################ ICL z and rho
-ICL3 <- function(K, L, data, sg, result, iter){
-  N = dim(data)[2]
-  p = dim(data)[1]
-  
-  rho_hat = result$rho_iter[, iter]
-  group_hat = result$group_iter[, iter]
-  mu_hat = result$mu_iter[, , iter]
-  mu0_hat = result$mu0_iter[, iter]
-  p_hat = sum(rho_hat != 0)
-  
   est_prob_group = table(group_hat)
   posterior_z = sum(log(est_prob_group/N) * est_prob_group)
   
@@ -317,43 +240,18 @@ ICL3 <- function(K, L, data, sg, result, iter){
 }
 
 
-
-
-################ ICL z and rho
-ICL4 <- function(K, L, data, sg, result, iter, weight=1, c = 1){
-  N = dim(data)[2]
-  p = dim(data)[1]
-  
-  rho_hat = result$rho_iter[, iter]
-  group_hat = result$group_iter[, iter]
-  mu_hat = result$mu_iter[, , iter]
-  mu0_hat = result$mu0_iter[, iter]
-  p_hat = sum(rho_hat != 0)
-  
-  est_prob_group = table(group_hat)
-  posterior_z = sum(log(est_prob_group/N) * est_prob_group)
-  
-  est_prob_rho = table(rho_hat)[1:L]
-  posterior_rho = sum(log(est_prob_rho/p_hat) * est_prob_rho)
-  
-  likelihood1 = 0
-  likelihood2 = 0
-  for(i in 1:N){
-    for(j in 1:p){
-      if(rho_hat[j]  != 0){
-        likelihood1 = likelihood1 + dpois(data[j, i], lambda = sg[j, i]*mu_hat[rho_hat[j], group_hat[i]+1], log = T)
-      }else{
-        likelihood2 = likelihood2 + dpois(data[j, i], lambda = sg[j, i]*mu0_hat[j], log = T)
-      }
-    }
+normalize <- function(count, mode = c("linear", "sigmoid", "standard"), alpha = 5) {
+  if (mode == "linear") {
+    max <- max(count)
+    min <- min(count)
+    count <- (count - min)/(max - min)
+  } else if (mode == "sigmoid") {
+    median <- mean(count)
+    count <- count - median
+    count <- 1/(1 + exp(-count*alpha))
+  }else if (mode == "standard"){
+    count <- (count - mean(count))/sd(count)
   }
-  term1 = (-2*(likelihood1+posterior_rho+posterior_z) + c*(K*log(N) + L*log(p_hat) + (K * L) *log(N*p_hat)))
-  term2 = weight * (-2*likelihood2 + (p-p_hat)*log(N))
-  #likelihood = (likelihood1 / p_hat + likelihood2 / (p - p_hat))*(p)
-  #likelihood = likelihood1 + likelihood2
-  #result = -2 *likelihood + N*log(K) + p_hat*log(L) + (K * L) *log(N*p_hat) + (p - p_hat)*log(N)
-  result = (term1 + term2 )/2
-  return(result)
+  return (count)
 }
-
 
